@@ -22,18 +22,43 @@ com USB**.
 | Todas mudas há mais que `CARENCIA` | `OB` (na bateria) | alerta no TrueNAS |
 | Mudas há `CARENCIA` + `AUTONOMIA` | `FSD OB LB` (bateria baixa) | TrueNAS desliga |
 | Sentinelas **e** controle mudos | (congela) | nada: é problema de rede, não de luz |
+| Nenhuma sentinela configurada | `OL` | nada |
 
 Basta **uma** sentinela responder para considerar que há energia. Por isso um
 roteador reiniciando para atualização não desliga nada. A carga
 (`battery.charge`) cai de 100 a 0 durante a autonomia, então o TrueNAS mostra
 uma "bateria" descendo.
 
+## Interface web
+
+![Interface do sentinela durante uma falta de energia](docs/painel.png)
+
+Na porta **8493** fica uma página com o estado ao vivo (cada IP com latência
+ou "sem resposta desde…", a bateria virtual e o histórico de eventos) e a
+configuração: sentinelas, controle, carência, autonomia, intervalo, ping e
+Wake-on-LAN. O que você salva passa a valer **na hora, sem reiniciar**, e fica
+em `/config/sentinela.json`.
+
+O navegador pede usuário e senha: o usuário pode ser qualquer um, e a senha é
+a `NUT_SENHA`, ou a `UI_SENHA` se você definir uma separada.
+
+No TrueNAS, a página abre pelo botão **Web UI** na página do app.
+
 ## Instalação no TrueNAS
 
 1. **Apps → Discover Apps → ⋮ → Install via YAML.** Cole o
-   [`compose/truenas.yaml`](compose/truenas.yaml) e ajuste os IPs e a senha.
-2. **System → Services → UPS**, configure e ative o serviço. Os nomes dos
-   campos podem variar um pouco entre versões do TrueNAS:
+   [`compose/truenas.yaml`](compose/truenas.yaml) e troque a senha. Não
+   precisa colocar IPs no YAML.
+
+   O botão Web UI vem do bloco `x-portals` e só é criado na **instalação**.
+   Se você instalar sem ele, adicionar depois numa edição não faz o botão
+   aparecer: apague e instale de novo. Sem o botão, a página continua em
+   `http://IP-DO-TRUENAS:8493`.
+2. **Abra o Web UI** e cadastre as sentinelas e o controle. Confira se os
+   pontos ficam verdes.
+3. **System → Services → UPS**, configure e ative o serviço. Os nomes dos
+   campos podem variar um pouco entre versões do TrueNAS (a própria interface
+   do sentinela mostra estes valores):
 
    | Campo | Valor |
    |---|---|
@@ -45,33 +70,42 @@ uma "bateria" descendo.
    | Shutdown Mode | **UPS reaches low battery** |
 
    Com "UPS reaches low battery", quem decide o momento de desligar é o
-   sentinela (`CARENCIA` + `AUTONOMIA`). Se preferir, "UPS goes on battery" +
+   sentinela (carência + autonomia). Se preferir, "UPS goes on battery" +
    Shutdown Timer também funciona, mas aí o timer do TrueNAS manda.
-3. Confira no Shell do TrueNAS: `upsc sentinela@127.0.0.1` deve mostrar
+4. Confira no Shell do TrueNAS: `upsc sentinela@127.0.0.1` deve mostrar
    `ups.status: OL`.
 
 Para testar sem desligar nada, deixe o serviço de UPS desativado e
-acompanhe os logs do app enquanto tira as sentinelas da tomada.
+acompanhe a interface enquanto tira as sentinelas da tomada.
 
-## Variáveis
+## Variáveis de ambiente
+
+Fixas, só pelo YAML:
 
 | Variável | Padrão | Descrição |
 |---|---|---|
-| `SENTINELAS` | (obrigatória) | IPs sem nobreak, separados por vírgula |
-| `CONTROLE` | vazio | IPs no nobreak; se todos sumirem, nada acontece |
-| `NUT_SENHA` | (obrigatória) | senha do usuário NUT |
+| `NUT_SENHA` | (obrigatória) | senha do usuário NUT e, por padrão, da interface |
 | `NUT_USUARIO` | `monitor` | usuário NUT |
+| `UI_SENHA` | = `NUT_SENHA` | senha da interface web, se quiser outra |
 | `UPS_NOME` | `sentinela` | nome do nobreak virtual |
+| `PORTA` / `UI_PORTA` | `3493` / `8493` | portas do NUT e da interface |
+| `LOG_NIVEL` | `INFO` | `DEBUG` para ver cada checagem |
+
+Editáveis na interface. Pelo ambiente, valem só como valor inicial; depois
+que você salva pela interface, o arquivo salvo tem prioridade:
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `SENTINELAS` | vazio | IPs ou nomes sem nobreak, separados por vírgula |
+| `CONTROLE` | vazio | IPs no nobreak; se todos sumirem, nada acontece |
 | `CARENCIA` | `60` | segundos sem sentinelas até `OB` |
 | `AUTONOMIA` | `240` | segundos em `OB` até bateria baixa |
 | `INTERVALO` | `15` | segundos entre checagens |
 | `PING_TIMEOUT` / `PING_TENTATIVAS` | `2` / `2` | por IP, a cada checagem |
-| `PORTA` | `3493` | porta NUT |
 | `WOL_MACS` | vazio | MACs para acordar quando a energia volta |
 | `WOL_BROADCAST` | `255.255.255.255` | endereço de broadcast |
 | `WOL_INTERVALO` / `WOL_DURACAO` | `120` / `1800` | repete o WoL por 30 min |
 | `WOL_AO_INICIAR` | `false` | começa mandando WoL ao ligar |
-| `LOG_NIVEL` | `INFO` | `DEBUG` para ver cada checagem |
 
 ## Religar quando a luz volta
 
@@ -86,8 +120,9 @@ dispara. Você tem três caminhos:
   `/etc/rc.local`.
 - **Um segundo sentinela num Raspberry Pi fora do nobreak**, com
   [`compose/raspberry-pi.yaml`](compose/raspberry-pi.yaml). Ele liga com a
-  energia e manda WoL repetidas vezes (`WOL_AO_INICIAR`), e também quando
-  detecta a volta da energia depois de uma falta.
+  energia e manda WoL repetidas vezes ("Mandar também ao ligar"), e também
+  quando detecta a volta da energia depois de uma falta. O MAC do NAS se
+  configura na seção Wake-on-LAN da interface.
 - Deixar o nobreak descarregar até cortar a saída, e a BIOS religa o PC.
 
 Repetir o WoL cobre o caso em que a luz volta enquanto o NAS ainda está
@@ -96,9 +131,10 @@ desligando. No servidor, ative Wake-on-LAN na BIOS e desative ErP/EuP.
 ## Desenvolvimento
 
 ```sh
-python3 -m unittest -v          # testes da máquina de estados
+python3 -m unittest -v          # estado, validação, persistência e API
 docker build -t sentinela .
-docker run --rm -e SENTINELAS=192.168.1.2 -e NUT_SENHA=x -p 3493:3493 sentinela
+docker run --rm -e NUT_SENHA=x -p 3493:3493 -p 8493:8493 sentinela
+# abra http://localhost:8493 (senha x)
 upsc sentinela@127.0.0.1
 ```
 

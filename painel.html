@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinela</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%231f8a4c'/%3E%3Cpath d='M18 5 9 18h6l-2 9 10-14h-6z' fill='white'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --fundo: #f4f5f2; --cartao: #ffffff; --texto: #1d2320; --suave: #66706a; --linha: #e1e4de;
+    --ok: #1f8a4c; --ok-fundo: #e3f3e8; --aviso: #b26a00; --aviso-fundo: #fbf0dc;
+    --perigo: #c0392b; --perigo-fundo: #fbe4e1; --info: #2f5f8a; --info-fundo: #e3edf6;
+    --destaque: #1d2320; --raio: 10px;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fundo: #141816; --cartao: #1c211e; --texto: #e7ebe8; --suave: #97a19b; --linha: #2c332f;
+      --ok: #4cc27d; --ok-fundo: #17301f; --aviso: #f0ad4e; --aviso-fundo: #33281a;
+      --perigo: #ff6b5b; --perigo-fundo: #3a1d1a; --info: #7fb0dd; --info-fundo: #1a2a38;
+      --destaque: #e7ebe8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fundo); color: var(--texto); font-size: 15px; line-height: 1.45; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  h1 span { color: var(--suave); font-weight: 400; font-size: 15px; margin-left: 8px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--suave); margin: 0 0 12px; font-weight: 600; }
+  .quando { color: var(--suave); font-size: 13px; }
+  .cartao { background: var(--cartao); border: 1px solid var(--linha); border-radius: var(--raio); padding: 18px; margin-bottom: 16px; }
+  .grade { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grade { grid-template-columns: 1fr; } }
+
+  .situacao { display: flex; gap: 18px; align-items: center; }
+  .situacao .icone { width: 54px; height: 54px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: 26px; font-weight: 700; }
+  .situacao h3 { margin: 0 0 2px; font-size: 20px; }
+  .situacao p { margin: 0; color: var(--suave); }
+  .s-normal .icone { background: var(--ok-fundo); color: var(--ok); }
+  .s-carencia .icone, .s-bateria .icone, .s-rede .icone { background: var(--aviso-fundo); color: var(--aviso); }
+  .s-desligando .icone { background: var(--perigo-fundo); color: var(--perigo); }
+  .s-sem_sentinelas .icone, .s-iniciando .icone { background: var(--info-fundo); color: var(--info); }
+
+  .bateria { margin-top: 16px; }
+  .bateria .barra { height: 10px; background: var(--linha); border-radius: 99px; overflow: hidden; }
+  .bateria .barra div { height: 100%; background: var(--ok); width: 100%; transition: width .6s, background .3s; }
+  .bateria .legenda { display: flex; justify-content: space-between; font-size: 13px; color: var(--suave); margin-top: 6px; }
+
+  .alvo { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--linha); }
+  .alvo:first-of-type { border-top: 0; }
+  .ponto { width: 10px; height: 10px; border-radius: 50%; background: var(--linha); flex: none; }
+  .ponto.ok { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-fundo); }
+  .ponto.mudo { background: var(--perigo); box-shadow: 0 0 0 3px var(--perigo-fundo); }
+  .alvo .ip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; }
+  .alvo .det { margin-left: auto; color: var(--suave); font-size: 13px; text-align: right; }
+  .vazio { color: var(--suave); font-size: 14px; padding: 4px 0; }
+  .dica { color: var(--suave); font-size: 13px; margin: -6px 0 10px; }
+
+  form .campo { margin-bottom: 14px; }
+  label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .ajuda { color: var(--suave); font-size: 13px; font-weight: 400; margin-top: 3px; }
+  input[type=text], input[type=number] {
+    width: 100%; padding: 8px 10px; border-radius: 7px; border: 1px solid var(--linha);
+    background: var(--fundo); color: var(--texto); font: inherit; font-size: 14px;
+  }
+  input:focus { outline: 2px solid var(--info); outline-offset: 0; border-color: transparent; }
+  .lista .linha { display: flex; gap: 6px; margin-bottom: 6px; }
+  .lista .linha input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  button { font: inherit; font-size: 14px; border-radius: 7px; border: 1px solid var(--linha); background: var(--cartao); color: var(--texto); padding: 7px 12px; cursor: pointer; }
+  button:hover { border-color: var(--suave); }
+  button.remover { padding: 7px 11px; color: var(--suave); }
+  button.adicionar { color: var(--info); border-style: dashed; }
+  button.primario { background: var(--destaque); color: var(--cartao); border-color: var(--destaque); font-weight: 600; padding: 9px 18px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .tres { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 720px) { .tres { grid-template-columns: 1fr; } }
+  details { border-top: 1px solid var(--linha); padding-top: 12px; margin-top: 4px; }
+  summary { cursor: pointer; font-weight: 600; font-size: 14px; margin-bottom: 12px; }
+  .check { display: flex; gap: 8px; align-items: center; font-weight: 400; }
+  .erro { color: var(--perigo); font-size: 13px; margin-top: 4px; }
+  .acoes { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+  .msg { font-size: 14px; }
+  .msg.ok { color: var(--ok); } .msg.falha { color: var(--perigo); }
+
+  .eventos { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow: auto; }
+  .eventos li { display: flex; gap: 12px; padding: 6px 0; border-top: 1px solid var(--linha); font-size: 14px; }
+  .eventos li:first-child { border-top: 0; }
+  .eventos time { color: var(--suave); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; padding-top: 1px; }
+  .eventos .aviso { color: var(--aviso); } .eventos .perigo { color: var(--perigo); font-weight: 600; } .eventos .ok { color: var(--ok); }
+  dl.nut { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; font-size: 14px; }
+  dl.nut dt { color: var(--suave); } dl.nut dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Sentinela <span>nobreak virtual por ping</span></h1>
+    <div class="quando" id="quando">conectando…</div>
+  </header>
+
+  <section class="cartao" id="cartao-situacao">
+    <div class="situacao s-iniciando" id="situacao">
+      <div class="icone" id="icone">…</div>
+      <div><h3 id="titulo">Carregando</h3><p id="detalhe"></p></div>
+    </div>
+    <div class="bateria">
+      <div class="barra"><div id="barra"></div></div>
+      <div class="legenda"><span id="carga">bateria virtual 100%</span><span id="restante"></span></div>
+    </div>
+  </section>
+
+  <div class="grade">
+    <section class="cartao">
+      <h2>Sentinelas · sem nobreak</h2>
+      <p class="dica">Basta uma responder para considerar que há energia.</p>
+      <div id="vivo-sentinelas"></div>
+    </section>
+    <section class="cartao">
+      <h2>Controle · no nobreak</h2>
+      <p class="dica">Se também sumir, é problema de rede: nada é desligado.</p>
+      <div id="vivo-controle"></div>
+    </section>
+  </div>
+
+  <section class="cartao">
+    <h2>Configuração</h2>
+    <form id="form" novalidate>
+      <div class="grade">
+        <div class="campo">
+          <label>Sentinelas</label>
+          <div class="lista" data-campo="sentinelas"></div>
+          <button type="button" class="adicionar" data-adicionar="sentinelas">+ adicionar IP</button>
+          <div class="ajuda">Equipamentos ligados direto na tomada: roteadores, access points…</div>
+          <div class="erro" data-erro="sentinelas"></div>
+        </div>
+        <div class="campo">
+          <label>Controle</label>
+          <div class="lista" data-campo="controle"></div>
+          <button type="button" class="adicionar" data-adicionar="controle">+ adicionar IP</button>
+          <div class="ajuda">O switch ou roteador que fica no nobreak junto com o servidor. Recomendado.</div>
+          <div class="erro" data-erro="controle"></div>
+        </div>
+      </div>
+
+      <div class="tres">
+        <div class="campo">
+          <label for="carencia">Carência (s)</label>
+          <input type="number" id="carencia" name="carencia" min="0" step="1">
+          <div class="ajuda" data-duracao="carencia"></div>
+          <div class="ajuda">Sentinelas mudas por quanto tempo antes de ir para a bateria.</div>
+          <div class="erro" data-erro="carencia"></div>
+        </div>
+        <div class="campo">
+          <label for="autonomia">Autonomia (s)</label>
+          <input type="number" id="autonomia" name="autonomia" min="0" step="1">
+          <div class="ajuda" data-duracao="autonomia"></div>
+          <div class="ajuda">Tempo na bateria até o desligamento.</div>
+          <div class="erro" data-erro="autonomia"></div>
+        </div>
+        <div class="campo">
+          <label for="intervalo">Intervalo (s)</label>
+          <input type="number" id="intervalo" name="intervalo" min="2" step="1">
+          <div class="ajuda" data-duracao="intervalo"></div>
+          <div class="ajuda">Entre uma checagem e outra.</div>
+          <div class="erro" data-erro="intervalo"></div>
+        </div>
+      </div>
+
+      <details>
+        <summary>Ping</summary>
+        <div class="tres">
+          <div class="campo">
+            <label for="ping_timeout">Timeout por ping (s)</label>
+            <input type="number" id="ping_timeout" name="ping_timeout" min="1" max="30" step="1">
+            <div class="erro" data-erro="ping_timeout"></div>
+          </div>
+          <div class="campo">
+            <label for="ping_tentativas">Tentativas por IP</label>
+            <input type="number" id="ping_tentativas" name="ping_tentativas" min="1" max="10" step="1">
+            <div class="erro" data-erro="ping_tentativas"></div>
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>Wake-on-LAN quando a energia voltar</summary>
+        <p class="dica" style="margin-top:0">Só faz sentido se este sentinela não roda no servidor que desliga (ex.: num Raspberry Pi fora do nobreak).</p>
+        <div class="grade">
+          <div class="campo">
+            <label>MACs para acordar</label>
+            <div class="lista" data-campo="wol_macs"></div>
+            <button type="button" class="adicionar" data-adicionar="wol_macs">+ adicionar MAC</button>
+            <div class="erro" data-erro="wol_macs"></div>
+          </div>
+          <div class="campo">
+            <label for="wol_broadcast">Broadcast</label>
+            <input type="text" id="wol_broadcast" name="wol_broadcast" placeholder="192.168.1.255">
+            <div class="erro" data-erro="wol_broadcast"></div>
+          </div>
+        </div>
+        <div class="tres">
+          <div class="campo">
+            <label for="wol_intervalo">Repetir a cada (s)</label>
+            <input type="number" id="wol_intervalo" name="wol_intervalo" min="10" step="1">
+            <div class="erro" data-erro="wol_intervalo"></div>
+          </div>
+          <div class="campo">
+            <label for="wol_duracao">Durante (s)</label>
+            <input type="number" id="wol_duracao" name="wol_duracao" min="0" step="1">
+            <div class="ajuda" data-duracao="wol_duracao"></div>
+            <div class="erro" data-erro="wol_duracao"></div>
+          </div>
+          <div class="campo">
+            <label>&nbsp;</label>
+            <label class="check"><input type="checkbox" id="wol_ao_iniciar" name="wol_ao_iniciar"> Mandar também ao ligar</label>
+          </div>
+        </div>
+      </details>
+
+      <div class="acoes">
+        <button type="submit" class="primario" id="salvar">Salvar</button>
+        <span class="msg" id="msg"></span>
+      </div>
+    </form>
+  </section>
+
+  <div class="grade">
+    <section class="cartao">
+      <h2>Eventos</h2>
+      <ul class="eventos" id="eventos"></ul>
+    </section>
+    <section class="cartao">
+      <h2>Serviço de UPS do TrueNAS</h2>
+      <p class="dica">System → Services → UPS, modo remoto (Slave):</p>
+      <dl class="nut" id="nut"></dl>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const LISTAS = ["sentinelas", "controle", "wol_macs"];
+const NUMEROS = ["carencia", "autonomia", "intervalo", "ping_timeout", "ping_tentativas", "wol_intervalo", "wol_duracao"];
+let alterado = false;
+
+function duracao(seg) {
+  seg = Math.max(0, Math.round(seg));
+  if (seg < 60) return `${seg} s`;
+  const m = Math.floor(seg / 60), s = seg % 60;
+  if (m < 60) return s ? `${m} min ${s} s` : `${m} min`;
+  const h = Math.floor(m / 60), mm = m % 60;
+  return mm ? `${h} h ${mm} min` : `${h} h`;
+}
+function relogio(ts) { return new Date(ts * 1000).toLocaleTimeString("pt-BR"); }
+function el(tag, attrs = {}, ...filhos) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) k === "class" ? e.className = v : e.setAttribute(k, v);
+  for (const f of filhos) e.append(f);
+  return e;
+}
+
+const TEXTOS = {
+  normal:        ["✓", "Energia normal", () => "Sentinelas respondendo."],
+  carencia:      ["!", "Sentinelas mudas", e => `Contando: ${duracao(e.sem_energia)} de ${duracao(e.carencia)} de carência.`],
+  bateria:       ["!", "Falta de energia", e => `Na bateria virtual. O TrueNAS desliga em ${duracao(e.restante)}.`],
+  desligando:    ["⏻", "Desligando", () => "Bateria baixa sinalizada: clientes NUT estão desligando."],
+  rede:          ["?", "Problema de rede", () => "Sentinelas e controle mudos. Não parece falta de luz, então nada é desligado."],
+  sem_sentinelas:["i", "Nenhuma sentinela configurada", () => "Adicione os IPs abaixo. Até lá, nada é desligado."],
+  iniciando:     ["…", "Iniciando", () => "Fazendo a primeira checagem."],
+};
+
+function desenharAlvos(caixa, lista, vazio) {
+  caixa.replaceChildren();
+  if (!lista.length) { caixa.append(el("div", { class: "vazio" }, vazio)); return; }
+  for (const a of lista) {
+    const estado = a.ok === null ? "" : a.ok ? "ok" : "mudo";
+    let det = a.ok === null ? "aguardando" : a.ok ? `${a.ms < 1 ? "<1" : Math.round(a.ms)} ms` : "sem resposta";
+    if (a.ok === false && a.desde) det += ` desde ${relogio(a.desde)}`;
+    caixa.append(el("div", { class: "alvo" }, el("span", { class: `ponto ${estado}` }), el("span", { class: "ip" }, a.ip), el("span", { class: "det" }, det)));
+  }
+}
+
+async function api(caminho, opcoes) {
+  const r = await fetch(caminho, { cache: "no-store", ...opcoes });
+  const corpo = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, corpo };
+}
+
+async function atualizarEstado() {
+  try {
+    const { ok, corpo: e } = await api("/api/estado");
+    if (!ok) throw new Error();
+    const [icone, titulo, detalhe] = TEXTOS[e.situacao] || TEXTOS.iniciando;
+    $("#situacao").className = `situacao s-${e.situacao}`;
+    $("#icone").textContent = icone; $("#titulo").textContent = titulo; $("#detalhe").textContent = detalhe(e);
+    const barra = $("#barra");
+    barra.style.width = `${e.carga}%`;
+    barra.style.background = e.carga > 50 ? "var(--ok)" : e.carga > 15 ? "var(--aviso)" : "var(--perigo)";
+    $("#carga").textContent = `bateria virtual ${e.carga}% · status NUT ${e.status}`;
+    $("#restante").textContent = e.status === "OL" ? `autonomia ${duracao(e.autonomia)}` : `restam ${duracao(e.restante)}`;
+    desenharAlvos($("#vivo-sentinelas"), e.sentinelas, "Nenhuma sentinela configurada.");
+    desenharAlvos($("#vivo-controle"), e.controle, "Sem controle: qualquer silêncio das sentinelas conta como falta de luz.");
+    $("#quando").textContent = e.ultima_checagem ? `última checagem ${relogio(e.ultima_checagem)} · a cada ${duracao(e.intervalo)}` : "aguardando primeira checagem";
+    const ev = $("#eventos"); ev.replaceChildren();
+    for (const x of e.eventos) {
+      const d = new Date(x.quando);
+      ev.append(el("li", {}, el("time", { datetime: x.quando }, d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })), el("span", { class: x.nivel }, x.mensagem)));
+    }
+    const nut = $("#nut"); nut.replaceChildren();
+    for (const [k, v] of [["Identifier", e.ups.nome], ["Remote Host", "127.0.0.1 (ou o IP deste equipamento)"], ["Remote Port", e.ups.porta], ["Monitor User", e.ups.usuario], ["Monitor Password", "a NUT_SENHA do app"], ["Shutdown Mode", "UPS reaches low battery"]])
+      nut.append(el("dt", {}, k), el("dd", {}, String(v)));
+  } catch {
+    $("#quando").textContent = "sem conexão com o sentinela";
+  }
+}
+
+function linhaLista(campo, valor = "") {
+  const ph = campo === "wol_macs" ? "AA:BB:CC:DD:EE:FF" : "192.168.1.2";
+  const input = el("input", { type: "text", placeholder: ph, spellcheck: "false", autocomplete: "off" });
+  input.value = valor;
+  const remover = el("button", { type: "button", class: "remover", "aria-label": "remover", title: "remover" }, "✕");
+  const linha = el("div", { class: "linha" }, input, remover);
+  remover.onclick = () => { linha.remove(); marcar(); };
+  return linha;
+}
+
+function preencher(cfg) {
+  for (const c of LISTAS) {
+    const caixa = $(`[data-campo="${c}"]`); caixa.replaceChildren();
+    for (const v of cfg[c]) caixa.append(linhaLista(c, v));
+  }
+  for (const c of NUMEROS) $(`#${c}`).value = cfg[c];
+  $("#wol_broadcast").value = cfg.wol_broadcast;
+  $("#wol_ao_iniciar").checked = cfg.wol_ao_iniciar;
+  duracoes(); alterado = false;
+}
+
+function coletar() {
+  const d = {};
+  for (const c of LISTAS) d[c] = $$(`[data-campo="${c}"] input`).map(i => i.value.trim()).filter(Boolean);
+  for (const c of NUMEROS) d[c] = $(`#${c}`).value === "" ? null : Number($(`#${c}`).value);
+  d.wol_broadcast = $("#wol_broadcast").value.trim();
+  d.wol_ao_iniciar = $("#wol_ao_iniciar").checked;
+  return d;
+}
+
+function duracoes() {
+  for (const e of $$("[data-duracao]")) {
+    const v = Number($(`#${e.dataset.duracao}`).value);
+    e.textContent = Number.isFinite(v) && v >= 60 ? `= ${duracao(v)}` : "";
+  }
+}
+function marcar() { alterado = true; $("#msg").textContent = "alterações não salvas"; $("#msg").className = "msg"; }
+
+$$("[data-adicionar]").forEach(b => b.onclick = () => {
+  const linha = linhaLista(b.dataset.adicionar);
+  $(`[data-campo="${b.dataset.adicionar}"]`).append(linha);
+  linha.querySelector("input").focus(); marcar();
+});
+$("#form").addEventListener("input", () => { duracoes(); marcar(); });
+
+$("#form").onsubmit = async ev => {
+  ev.preventDefault();
+  $$("[data-erro]").forEach(e => e.textContent = "");
+  const botao = $("#salvar"); botao.disabled = true;
+  try {
+    const { ok, corpo } = await api("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(coletar()) });
+    if (ok) {
+      preencher(corpo);
+      $("#msg").textContent = "salvo, já valendo"; $("#msg").className = "msg ok";
+      setTimeout(atualizarEstado, 1500);
+    } else {
+      for (const [k, v] of Object.entries(corpo.erros || {})) { const e = $(`[data-erro="${k}"]`); if (e) e.textContent = v; }
+      $("#msg").textContent = corpo.erro || "corrija os campos marcados"; $("#msg").className = "msg falha";
+    }
+  } catch {
+    $("#msg").textContent = "não consegui falar com o sentinela"; $("#msg").className = "msg falha";
+  } finally { botao.disabled = false; }
+};
+
+window.addEventListener("beforeunload", e => { if (alterado) e.preventDefault(); });
+
+api("/api/config").then(({ ok, corpo }) => ok && preencher(corpo));
+atualizarEstado();
+setInterval(atualizarEstado, 3000);
+</script>
+</body>
+</html>
