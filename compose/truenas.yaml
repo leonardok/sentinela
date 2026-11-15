@@ -1,12 +1,16 @@
 # Sentinela no TrueNAS: Apps → Discover Apps → ⋮ → Install via YAML.
+# Para mudar depois: Apps → sentinela → Edit. O app reinicia com os valores novos.
 #
-# Só a senha é obrigatória aqui. IPs e tempos se configuram depois na
-# interface web, pelo botão "Web UI" na página do app (usuário: qualquer um,
-# senha: NUT_SENHA). Em seguida configure o serviço de UPS do TrueNAS em modo
-# remoto apontando para 127.0.0.1:3493 (veja o README).
+# Regra: o que estiver definido aqui MANDA, e aparece travado (com a etiqueta
+# APP) na interface web. O que você deixar vazio ou comentado pode ser
+# ajustado pela interface (botão "Web UI" do app, senha = NUT_SENHA).
 #
-# Atenção: o botão "Web UI" (x-portals) só aparece se este bloco estiver no
-# YAML quando o app é CRIADO. Se faltar, apague e instale o app de novo.
+# Tempos aceitam segundos ("90") ou unidades: "90s", "2min", "1m30s".
+#
+# Depois de instalar, configure System → Services → UPS:
+#   UPS Mode: Slave · Identifier: sentinela · Remote Host: 127.0.0.1
+#   Remote Port: 3493 · Monitor User/Password: NUT_USUARIO/NUT_SENHA
+#   Shutdown Mode: UPS reaches low battery
 services:
   sentinela:
     image: ghcr.io/leonardok/sentinela:latest
@@ -17,15 +21,45 @@ services:
     cap_add:
       - NET_RAW            # ping
     volumes:
-      - config:/config     # configuração salva pela interface
+      - config:/config     # o que for salvo pela interface
     environment:
+      # ---- Acesso (obrigatório) ------------------------------------------
       NUT_USUARIO: "monitor"
       NUT_SENHA: "troque-esta-senha"
+
+      # ---- Quem vigiar ---------------------------------------------------
+      # Equipamentos SEM nobreak, separados por vírgula. Basta um responder
+      # para considerar que há energia.
+      SENTINELAS: "192.168.1.2,192.168.1.3"
+      # Equipamento(s) NO nobreak junto com o servidor (switch/roteador).
+      # Se também sumirem, é problema de rede e nada é desligado.
+      CONTROLE: "192.168.1.1"
+
+      # ---- Tempos de cada modo -------------------------------------------
+      # 1) Sentinelas mudas por quanto tempo até entrar em modo bateria.
+      CARENCIA: "30s"
+      # 2) Quanto tempo em modo bateria até a bateria baixa = TrueNAS desliga.
+      AUTONOMIA: "1m30s"
+      # Intervalo entre checagens.
+      INTERVALO: "15s"
+
+      # ---- Só para a conta da interface (não mudam o comportamento) ------
+      # Quanto seu nobreak aguenta e quanto o NAS leva para desligar.
+      # A interface avisa se o nobreak acabar antes de o NAS desligar.
+      NOBREAK_DURACAO: ""          # ex.: "5min"
+      TEMPO_DESLIGAR: "2min"
+
+      # ---- Opcionais -----------------------------------------------------
+      # PING_TIMEOUT: "2"          # segundos por ping
+      # PING_TENTATIVAS: "2"       # tentativas por IP a cada checagem
+      # UI_SENHA: ""               # senha separada para a interface
       TZ: "America/Sao_Paulo"
 
 volumes:
   config:
 
+# Botão "Web UI" na página do app. Só é criado se estiver aqui NA INSTALAÇÃO;
+# adicionar numa edição depois não faz o botão aparecer.
 x-portals:
   - name: Web UI
     scheme: http

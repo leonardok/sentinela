@@ -96,6 +96,12 @@
   .lt-texto b { color: var(--texto); font-weight: 600; }
   .lt-veredito { font-size: 14px; margin-top: 8px; font-weight: 600; }
   .lt-veredito.ok { color: var(--ok); } .lt-veredito.aviso { color: var(--aviso); } .lt-veredito.perigo { color: var(--perigo); }
+  .yaml { display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+          background: var(--info-fundo); color: var(--info); vertical-align: 1px; }
+  .campo.travado input { opacity: .75; cursor: not-allowed; }
+  .campo.travado .adicionar, .campo.travado .remover { display: none; }
+  .campo.travado .lista .linha input { width: 100%; }
+  .yaml-ajuda { color: var(--info); }
   .eventos { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow: auto; }
   .eventos li { display: flex; gap: 12px; padding: 6px 0; border-top: 1px solid var(--linha); font-size: 14px; }
   .eventos li:first-child { border-top: 0; }
@@ -138,6 +144,7 @@
 
   <section class="cartao">
     <h2>Configuração</h2>
+    <p class="dica">O que estiver definido no app do TrueNAS (formulário ou YAML) manda e aparece travado aqui. O resto se edita nesta página e vale na hora.</p>
     <form id="form" novalidate>
       <div class="grade">
         <div class="campo">
@@ -279,6 +286,7 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const LISTAS = ["sentinelas", "controle", "wol_macs"];
 const NUMEROS = ["carencia", "autonomia", "intervalo", "nobreak_duracao", "tempo_desligar", "ping_timeout", "ping_tentativas", "wol_intervalo", "wol_duracao"];
 let alterado = false;
+let travados = new Set();
 
 function duracao(seg) {
   seg = Math.max(0, Math.round(seg));
@@ -361,7 +369,15 @@ function linhaLista(campo, valor = "") {
   return linha;
 }
 
-function preencher(cfg) {
+function caixaDo(c) {
+  return (LISTAS.includes(c) ? $(`[data-campo="${c}"]`) : $(`#${c}`)).closest(".campo");
+}
+
+function preencher(resposta) {
+  const cfg = resposta.valores;
+  travados = new Set(resposta.travados || []);
+  $$(".campo.travado").forEach(c => { c.classList.remove("travado"); c.querySelectorAll(".yaml, .yaml-ajuda").forEach(e => e.remove()); });
+  $$("#form input, #form button").forEach(e => e.disabled = false);
   for (const c of LISTAS) {
     const caixa = $(`[data-campo="${c}"]`); caixa.replaceChildren();
     for (const v of cfg[c]) caixa.append(linhaLista(c, v));
@@ -369,6 +385,15 @@ function preencher(cfg) {
   for (const c of NUMEROS) $(`#${c}`).value = cfg[c];
   $("#wol_broadcast").value = cfg.wol_broadcast;
   $("#wol_ao_iniciar").checked = cfg.wol_ao_iniciar;
+  for (const c of travados) {
+    const caixa = caixaDo(c);
+    if (!caixa) continue;
+    caixa.classList.add("travado");
+    caixa.querySelectorAll("input, button").forEach(e => e.disabled = true);
+    caixa.querySelector("label").append(el("span", { class: "yaml", title: "Definido na configuração do app no TrueNAS" }, "APP"));
+    caixa.append(el("div", { class: "ajuda yaml-ajuda" }, "Definido na configuração do app no TrueNAS. Para mudar, use Edit no app."));
+  }
+  $("#salvar").disabled = !$$("#form input").some(e => !e.disabled);
   duracoes(); alterado = false;
 }
 
@@ -378,6 +403,7 @@ function coletar() {
   for (const c of NUMEROS) d[c] = $(`#${c}`).value === "" ? null : Number($(`#${c}`).value);
   d.wol_broadcast = $("#wol_broadcast").value.trim();
   d.wol_ao_iniciar = $("#wol_ao_iniciar").checked;
+  for (const c of travados) delete d[c];
   return d;
 }
 

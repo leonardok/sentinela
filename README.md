@@ -37,7 +37,8 @@ Na porta **8493** fica uma página com o estado ao vivo (cada IP com latência
 ou "sem resposta desde…", a bateria virtual e o histórico de eventos) e a
 configuração: sentinelas, controle, carência, autonomia, intervalo, ping e
 Wake-on-LAN. O que você salva passa a valer **na hora, sem reiniciar**, e fica
-em `/config/sentinela.json`.
+em `/config/sentinela.json`. Campos definidos nas variáveis de ambiente do
+app aparecem travados, com a etiqueta `APP`.
 
 ### Tempos
 
@@ -62,17 +63,59 @@ No TrueNAS, a página abre pelo botão **Web UI** na página do app.
 
 ## Instalação no TrueNAS
 
-1. **Apps → Discover Apps → ⋮ → Install via YAML.** Cole o
-   [`compose/truenas.yaml`](compose/truenas.yaml) e troque a senha. Não
-   precisa colocar IPs no YAML.
+**De onde vem a configuração:** variável de ambiente definida no app (pelo
+formulário ou pelo YAML) **manda**, e aparece travada na interface web com a
+etiqueta `APP`. O que você não definir pode ser ajustado pela interface web.
+Tempos aceitam segundos (`90`) ou unidades (`90s`, `2min`, `1m30s`).
 
-   O botão Web UI vem do bloco `x-portals` e só é criado na **instalação**.
-   Se você instalar sem ele, adicionar depois numa edição não faz o botão
-   aparecer: apague e instale de novo. Sem o botão, a página continua em
-   `http://IP-DO-TRUENAS:8493`.
-2. **Abra o Web UI** e cadastre as sentinelas e o controle. Confira se os
-   pontos ficam verdes.
-3. **System → Services → UPS**, configure e ative o serviço. Os nomes dos
+Há dois jeitos de instalar. Escolha um.
+
+### Opção A: formulário do TrueNAS (Custom App)
+
+Configuração em campos do próprio TrueNAS, sem editar texto.
+
+**Apps → Discover Apps → Custom App** e preencha:
+
+| Seção | Campo | Valor |
+|---|---|---|
+| Image | Repository / Tag | `ghcr.io/leonardok/sentinela` / `latest` |
+| Environment Variables | Name / Value (Add para cada) | veja a tabela abaixo |
+| Ports | Container Port / Host Port | `3493`→`3493` TCP e `8493`→`8493` TCP |
+| Storage | Type ixVolume, Mount Path | `/config` |
+| Portal Configuration | Name, Protocol, Use Node IP, Port, Path | `Web UI`, HTTP, marcado, `8493`, `/` |
+| Capabilities | Add | `NET_RAW` |
+| Restart Policy | | Unless Stopped |
+
+Variáveis de ambiente:
+
+| Name | Exemplo de Value |
+|---|---|
+| `NUT_SENHA` | uma senha (obrigatória) |
+| `SENTINELAS` | `192.168.1.2,192.168.1.3` |
+| `CONTROLE` | `192.168.1.1` |
+| `CARENCIA` | `30s` (até entrar em modo bateria) |
+| `AUTONOMIA` | `1m30s` (em modo bateria até desligar) |
+| `NOBREAK_DURACAO` | `5min` (opcional, só para a conta da interface) |
+| `TEMPO_DESLIGAR` | `2min` (opcional, idem) |
+
+Para mudar depois, use **Edit** no app e altere as variáveis. O app reinicia
+com os valores novos.
+
+### Opção B: YAML (Install via YAML)
+
+**Apps → Discover Apps → ⋮ → Install via YAML** e cole o
+[`compose/truenas.yaml`](compose/truenas.yaml), que traz todas as opções
+comentadas. Para mudar depois, **Edit** no app e edite o texto.
+
+O botão Web UI vem do bloco `x-portals` e só é criado na **instalação**.
+Adicionado depois numa edição, o botão não aparece: apague e instale de novo.
+Sem o botão, a página continua em `http://IP-DO-TRUENAS:8493`.
+
+### Depois de instalar (as duas opções)
+
+1. **Abra o Web UI** e confira se os pontos das sentinelas e do controle
+   ficam verdes e se a linha do tempo fecha com o seu nobreak.
+2. **System → Services → UPS**, configure e ative o serviço. Os nomes dos
    campos podem variar um pouco entre versões do TrueNAS (a própria interface
    do sentinela mostra estes valores):
 
@@ -88,7 +131,7 @@ No TrueNAS, a página abre pelo botão **Web UI** na página do app.
    Com "UPS reaches low battery", quem decide o momento de desligar é o
    sentinela (carência + autonomia). Se preferir, "UPS goes on battery" +
    Shutdown Timer também funciona, mas aí o timer do TrueNAS manda.
-4. Confira no Shell do TrueNAS: `upsc sentinela@127.0.0.1` deve mostrar
+3. Confira no Shell do TrueNAS: `upsc sentinela@127.0.0.1` deve mostrar
    `ups.status: OL`.
 
 Para testar sem desligar nada, deixe o serviço de UPS desativado e
@@ -107,8 +150,9 @@ Fixas, só pelo YAML:
 | `PORTA` / `UI_PORTA` | `3493` / `8493` | portas do NUT e da interface |
 | `LOG_NIVEL` | `INFO` | `DEBUG` para ver cada checagem |
 
-Editáveis na interface. Pelo ambiente, valem só como valor inicial; depois
-que você salva pela interface, o arquivo salvo tem prioridade:
+Também editáveis na interface web, **a não ser que estejam definidas no app**:
+definidas aqui, elas mandam e ficam travadas na interface. Tempos aceitam
+unidades (`90s`, `2min`, `1m30s`):
 
 | Variável | Padrão | Descrição |
 |---|---|---|

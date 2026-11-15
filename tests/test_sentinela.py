@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sentinela import (BATERIA, BATERIA_BAIXA, ONLINE, Config, ErroValidacao,
                        Estado, Monitor, carregar_salvo, criar_servidor,
-                       pacote_magico, salvar, validar_ajustes)
+                       pacote_magico, salvar, segundos, validar_ajustes)
 
 
 class TestEstado(unittest.TestCase):
@@ -155,6 +155,53 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(carregar_salvo(cfg).sentinelas, ["10.0.0.9"])
 
 
+class TestYaml(unittest.TestCase):
+    """O que vem do YAML (variáveis de ambiente) manda sobre a interface."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.env = {"NUT_SENHA": "x", "CONFIG_ARQUIVO": str(Path(self.tmp.name) / "s.json"),
+                    "SENTINELAS": "10.0.0.2,10.0.0.3", "AUTONOMIA": "1m30s", "CONTROLE": ""}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_tempos_com_unidade(self):
+        self.assertEqual(segundos("2min"), 120)
+        self.assertEqual(segundos("1m30s"), 90)
+        self.assertEqual(segundos(45), 45)
+        with self.assertRaises(ValueError):
+            segundos("2 horas")
+        cfg = Config.do_ambiente(self.env)
+        self.assertEqual(cfg.autonomia, 90)
+
+    def test_vazio_nao_trava(self):
+        cfg = Config.do_ambiente(self.env)
+        self.assertEqual(cfg.travados, {"sentinelas", "autonomia"})
+
+    def test_yaml_vence_o_arquivo_salvo(self):
+        cfg = Config.do_ambiente(self.env)
+        Path(self.env["CONFIG_ARQUIVO"]).write_text(json.dumps(
+            {"sentinelas": ["10.9.9.9"], "autonomia": 999, "carencia": 7}))
+        carregado = carregar_salvo(cfg)
+        self.assertEqual(carregado.sentinelas, ["10.0.0.2", "10.0.0.3"])
+        self.assertEqual(carregado.autonomia, 90)
+        self.assertEqual(carregado.carencia, 7)          # não está no YAML: vale o salvo
+
+    def test_interface_nao_muda_o_que_e_do_yaml(self):
+        m = Monitor(Config.do_ambiente(self.env), pinger=PingFalso(), escrever=False)
+        with self.assertRaises(ErroValidacao) as c:
+            m.atualizar_config({"sentinelas": ["10.0.0.9"], "carencia": 10})
+        self.assertEqual(set(c.exception.erros), {"sentinelas"})
+        self.assertEqual(m.cfg.carencia, 30)              # nada foi aplicado
+        # mandar o mesmo valor do YAML (formulário completo) é aceito
+        m.atualizar_config({"sentinelas": ["10.0.0.2", "10.0.0.3"], "autonomia": 90, "carencia": 10})
+        self.assertEqual(m.cfg.carencia, 10)
+        salvo = json.loads(Path(self.env["CONFIG_ARQUIVO"]).read_text())
+        self.assertNotIn("sentinelas", salvo)             # o do YAML não vai para o arquivo
+        self.assertEqual(salvo["carencia"], 10)
+
+
 class PingFalso:
     def __init__(self):
         self.vivos = set()
@@ -253,13 +300,17 @@ class TestApi(unittest.TestCase):
     def test_salvar_config(self):
         codigo, corpo = self.req("/api/config", {"sentinelas": ["10.0.0.5", "10.0.0.6"], "autonomia": 120})
         self.assertEqual(codigo, 200, corpo)
-        self.assertEqual(json.loads(corpo)["sentinelas"], ["10.0.0.5", "10.0.0.6"])
-        self.assertEqual(json.loads(self.req("/api/config")[1])["autonomia"], 120)
+        self.assertEqual(json.loads(corpo)["valores"]["sentinelas"], ["10.0.0.5", "10.0.0.6"])
+        self.assertEqual(json.loads(self.req("/api/config")[1])["valores"]["autonomia"], 120)
 
     def test_erro_de_validacao(self):
         codigo, corpo = self.req("/api/config", {"sentinelas": ["999.1.1.1"]})
         self.assertEqual(codigo, 400)
         self.assertIn("sentinelas", json.loads(corpo)["erros"])
+
+    def test_travados_na_api(self):
+        corpo = json.loads(self.req("/api/config")[1])
+        self.assertEqual(corpo["travados"], [])
 
     def test_exige_json(self):
         self.assertEqual(self.req("/api/config", {"a": 1}, tipo="text/plain")[0], 415)

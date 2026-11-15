@@ -97,6 +97,9 @@ class Config:
     ui_porta: int = 8493
     ui_senha: str = ""
     config_arquivo: Path = Path("/config/sentinela.json")
+    # Ajustes definidos por variável de ambiente (no YAML do app): mandam sobre
+    # a interface, que os mostra travados.
+    travados: frozenset = frozenset()
     conf_dir: Path = Path("/etc/nut")
     estado_dir: Path = Path("/run/nut")
 
@@ -125,8 +128,9 @@ class Config:
             "WOL_INTERVALO": "wol_intervalo", "WOL_AO_INICIAR": "wol_ao_iniciar",
             "NOBREAK_DURACAO": "nobreak_duracao", "TEMPO_DESLIGAR": "tempo_desligar",
         }
-        ajustes = {campo: env[var] for var, campo in mapa.items() if var in env}
-        return base.com(validar_ajustes(ajustes, base.ajustes()))
+        ajustes = {campo: env[var] for var, campo in mapa.items() if str(env.get(var, "")).strip()}
+        cfg = base.com(validar_ajustes(ajustes, base.ajustes()))
+        return dataclasses.replace(cfg, travados=frozenset(ajustes))
 
     def ajustes(self) -> dict:
         return {nome: getattr(self, nome) for nome in AJUSTAVEIS}
@@ -166,6 +170,37 @@ def _numero(minimo: float, maximo: float, inteiro: bool = False):
     return conv
 
 
+_PARTE_TEMPO = re.compile(r"(\d+(?:[.,]\d+)?)\s*(h|min|m|s)?", re.IGNORECASE)
+_SEGUNDOS = {"h": 3600, "min": 60, "m": 60, "s": 1, None: 1}
+
+
+def segundos(valor) -> float:
+    """Aceita número (segundos) ou texto como "90", "90s", "2min", "1m30s", "1h"."""
+    if isinstance(valor, (int, float)) and not isinstance(valor, bool):
+        return float(valor)
+    texto = str(valor).strip().lower().replace(" ", "")
+    if not texto:
+        raise ValueError("vazio")
+    pos, total = 0, 0.0
+    for m in _PARTE_TEMPO.finditer(texto):
+        if m.start() != pos:
+            break
+        total += float(m.group(1).replace(",", ".")) * _SEGUNDOS[m.group(2)]
+        pos = m.end()
+    if pos != len(texto):
+        raise ValueError(f"tempo inválido: {valor!r} (use 90, 90s, 2min ou 1m30s)")
+    return total
+
+
+def _tempo(minimo: float, maximo: float):
+    def conv(valor):
+        n = segundos(valor)
+        if not (minimo <= n <= maximo):
+            raise ValueError(f"deve ficar entre {minimo:g} e {maximo:g} segundos")
+        return n
+    return conv
+
+
 def _enderecos(valor):
     itens = _lista(valor)
     ruins = [i for i in itens if not _endereco(i)]
@@ -195,17 +230,17 @@ def _broadcast(valor):
 AJUSTAVEIS = {
     "sentinelas": _enderecos,
     "controle": _enderecos,
-    "intervalo": _numero(2, 3600),
-    "carencia": _numero(0, 86400),
-    "autonomia": _numero(0, 86400),
-    "nobreak_duracao": _numero(0, 86400),
-    "tempo_desligar": _numero(0, 3600),
+    "intervalo": _tempo(2, 3600),
+    "carencia": _tempo(0, 86400),
+    "autonomia": _tempo(0, 86400),
+    "nobreak_duracao": _tempo(0, 86400),
+    "tempo_desligar": _tempo(0, 3600),
     "ping_timeout": _numero(1, 30, inteiro=True),
     "ping_tentativas": _numero(1, 10, inteiro=True),
     "wol_macs": _macs,
     "wol_broadcast": _broadcast,
-    "wol_duracao": _numero(0, 86400),
-    "wol_intervalo": _numero(10, 86400),
+    "wol_duracao": _tempo(0, 86400),
+    "wol_intervalo": _tempo(10, 86400),
     "wol_ao_iniciar": _bool,
 }
 
@@ -238,8 +273,9 @@ def carregar_salvo(cfg: Config) -> Config:
     except (OSError, json.JSONDecodeError) as erro:
         log.error("não consegui ler %s (%s); usando variáveis de ambiente", cfg.config_arquivo, erro)
         return cfg
+    livres = {k: v for k, v in dados.items() if k not in cfg.travados}
     try:
-        return cfg.com(validar_ajustes(dados, cfg.ajustes()))
+        return cfg.com(validar_ajustes(livres, cfg.ajustes()))
     except ErroValidacao as erro:
         log.error("configuração salva inválida (%s); usando variáveis de ambiente", erro)
         return cfg
@@ -248,7 +284,8 @@ def carregar_salvo(cfg: Config) -> Config:
 def salvar(cfg: Config) -> None:
     cfg.config_arquivo.parent.mkdir(parents=True, exist_ok=True)
     tmp = cfg.config_arquivo.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cfg.ajustes(), indent=2, ensure_ascii=False) + "\n")
+    livres = {k: v for k, v in cfg.ajustes().items() if k not in cfg.travados}
+    tmp.write_text(json.dumps(livres, indent=2, ensure_ascii=False) + "\n")
     os.replace(tmp, cfg.config_arquivo)
 
 
@@ -533,8 +570,12 @@ class Monitor:
 
     def atualizar_config(self, dados: dict) -> Config:
         with self.trava:
-            novos = validar_ajustes(dados, self.cfg.ajustes())
-            novo = self.cfg.com(novos)
+            atuais = self.cfg.ajustes()
+            normalizados = validar_ajustes(dados, atuais)
+            mudados = sorted(k for k in self.cfg.travados if k in dados and normalizados[k] != atuais[k])
+            if mudados:
+                raise ErroValidacao({k: "definido na configuração do app no TrueNAS; mude lá" for k in mudados})
+            novo = self.cfg.com({k: v for k, v in normalizados.items() if k not in self.cfg.travados})
             salvar(novo)
             self.cfg = novo
             self.estado.ajustar(novo.carencia, novo.autonomia)
@@ -604,6 +645,10 @@ class Monitor:
 # Interface web
 # --------------------------------------------------------------------------
 
+def config_api(cfg: Config) -> dict:
+    return {"valores": cfg.ajustes(), "travados": sorted(cfg.travados)}
+
+
 def criar_servidor(monitor: Monitor, host: str = "0.0.0.0", porta: int | None = None) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         server_version = "sentinela"
@@ -652,7 +697,7 @@ def criar_servidor(monitor: Monitor, host: str = "0.0.0.0", porta: int | None = 
                 return self._json(200, monitor.snapshot())
             if caminho == "/api/config":
                 with monitor.trava:
-                    return self._json(200, monitor.cfg.ajustes())
+                    return self._json(200, config_api(monitor.cfg))
             self._json(404, {"erro": "não encontrado"})
 
         def do_POST(self):
@@ -675,7 +720,7 @@ def criar_servidor(monitor: Monitor, host: str = "0.0.0.0", porta: int | None = 
                 return self._json(400, {"erros": erro.erros})
             except OSError as erro:
                 return self._json(500, {"erro": f"não consegui salvar: {erro}"})
-            self._json(200, novo.ajustes())
+            self._json(200, config_api(novo))
 
     return ThreadingHTTPServer((host, monitor.cfg.ui_porta if porta is None else porta), Handler)
 
@@ -714,6 +759,8 @@ def main() -> int:
     threading.Thread(target=servidor.serve_forever, daemon=True).start()
     threading.Thread(target=monitor.loop, daemon=True).start()
     log.info("NUT na porta %s, interface web na porta %s", cfg.porta, cfg.ui_porta)
+    if cfg.travados:
+        log.info("definidos no app (travados na interface): %s", ", ".join(sorted(cfg.travados)))
     if not cfg.sentinelas:
         log.warning("nenhuma sentinela configurada: abra a interface web para configurar")
 
