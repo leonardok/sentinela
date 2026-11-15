@@ -200,6 +200,16 @@ docker run --rm -e NUT_SENHA=x -p 3493:3493 -p 8493:8493 sentinela
 upsc sentinela@127.0.0.1
 ```
 
+Teste de ponta a ponta só com Docker (roda igual no Mac, Linux ou no CI): sobe
+duas sentinelas, um controle, o sentinela e um `upsmon` fazendo o papel do
+TrueNAS numa rede isolada, e simula uma sentinela caindo, problema de rede,
+falta de luz (conferindo que o `upsmon` dispara o desligamento) e a volta da
+energia:
+
+```sh
+./scripts/teste-docker.sh
+```
+
 A cada push na `main`, o GitHub Actions roda os testes e publica a imagem em
 `ghcr.io/leonardok/sentinela` para amd64, arm64 e armv7.
 

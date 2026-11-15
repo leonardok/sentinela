@@ -46,6 +46,9 @@ jobs:
           try: u.urlopen('http://127.0.0.1:8493/'); raise SystemExit('painel sem senha!')
           except e.HTTPError as x: assert x.code == 401"
 
+      - name: Teste de ponta a ponta (falta de luz simulada)
+        run: IMG=sentinela:ci SKIP_BUILD=1 ./scripts/teste-docker.sh
+
       - uses: docker/login-action@v3
         if: github.event_name != 'pull_request'
         with:
