@@ -83,6 +83,19 @@
   .msg { font-size: 14px; }
   .msg.ok { color: var(--ok); } .msg.falha { color: var(--perigo); }
 
+  h3.sub { font-size: 14px; margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--linha); }
+  .fase { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .f1 { background: var(--aviso); opacity: .55; } .f2 { background: var(--aviso); } .f3 { background: var(--perigo); }
+  .linha-tempo { background: var(--fundo); border: 1px solid var(--linha); border-radius: 8px; padding: 14px; margin: 2px 0 16px; }
+  .trilho { position: relative; display: flex; height: 14px; border-radius: 4px; background: var(--linha); overflow: visible; }
+  .trilho .seg { height: 100%; transition: width .3s; }
+  .trilho .seg:first-child { border-radius: 4px 0 0 4px; }
+  .trilho .limite { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--texto); display: none; }
+  .trilho .limite::after { content: "nobreak acaba"; position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--suave); white-space: nowrap; }
+  .lt-texto { font-size: 13px; color: var(--suave); margin-top: 10px; }
+  .lt-texto b { color: var(--texto); font-weight: 600; }
+  .lt-veredito { font-size: 14px; margin-top: 8px; font-weight: 600; }
+  .lt-veredito.ok { color: var(--ok); } .lt-veredito.aviso { color: var(--aviso); } .lt-veredito.perigo { color: var(--perigo); }
   .eventos { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow: auto; }
   .eventos li { display: flex; gap: 12px; padding: 6px 0; border-top: 1px solid var(--linha); font-size: 14px; }
   .eventos li:first-child { border-top: 0; }
@@ -143,28 +156,50 @@
         </div>
       </div>
 
+      <h3 class="sub">Tempos</h3>
       <div class="tres">
         <div class="campo">
-          <label for="carencia">Carência (s)</label>
+          <label for="carencia"><span class="fase f1"></span>Até entrar em modo bateria (s)</label>
           <input type="number" id="carencia" name="carencia" min="0" step="1">
           <div class="ajuda" data-duracao="carencia"></div>
-          <div class="ajuda">Sentinelas mudas por quanto tempo antes de ir para a bateria.</div>
+          <div class="ajuda">Sentinelas mudas por esse tempo = falta de luz. Evita reagir a um piscar de energia.</div>
           <div class="erro" data-erro="carencia"></div>
         </div>
         <div class="campo">
-          <label for="autonomia">Autonomia (s)</label>
+          <label for="autonomia"><span class="fase f2"></span>Em modo bateria até desligar (s)</label>
           <input type="number" id="autonomia" name="autonomia" min="0" step="1">
           <div class="ajuda" data-duracao="autonomia"></div>
-          <div class="ajuda">Tempo na bateria até o desligamento.</div>
+          <div class="ajuda">Espera a luz voltar. Acabou o tempo: bateria baixa e o TrueNAS desliga.</div>
           <div class="erro" data-erro="autonomia"></div>
         </div>
         <div class="campo">
-          <label for="intervalo">Intervalo (s)</label>
+          <label for="intervalo">Checar a cada (s)</label>
           <input type="number" id="intervalo" name="intervalo" min="2" step="1">
           <div class="ajuda" data-duracao="intervalo"></div>
-          <div class="ajuda">Entre uma checagem e outra.</div>
+          <div class="ajuda">Intervalos menores reagem mais rápido.</div>
           <div class="erro" data-erro="intervalo"></div>
         </div>
+      </div>
+      <div class="tres">
+        <div class="campo">
+          <label for="nobreak_duracao">Quanto seu nobreak aguenta (s)</label>
+          <input type="number" id="nobreak_duracao" name="nobreak_duracao" min="0" step="1" placeholder="0 = não sei">
+          <div class="ajuda" data-duracao="nobreak_duracao"></div>
+          <div class="ajuda">Com o servidor e o que mais estiver ligado nele. Só serve para a conta abaixo.</div>
+          <div class="erro" data-erro="nobreak_duracao"></div>
+        </div>
+        <div class="campo">
+          <label for="tempo_desligar"><span class="fase f3"></span>Tempo que o NAS leva para desligar (s)</label>
+          <input type="number" id="tempo_desligar" name="tempo_desligar" min="0" step="1">
+          <div class="ajuda" data-duracao="tempo_desligar"></div>
+          <div class="ajuda">Parar apps, VMs e exportar os pools. Meça uma vez desligando pela interface do TrueNAS.</div>
+          <div class="erro" data-erro="tempo_desligar"></div>
+        </div>
+      </div>
+      <div class="linha-tempo" id="linha-tempo">
+        <div class="trilho"><div class="seg f1" id="lt1"></div><div class="seg f2" id="lt2"></div><div class="seg f3" id="lt3"></div><div class="limite" id="lt-limite"></div></div>
+        <div class="lt-texto" id="lt-texto"></div>
+        <div class="lt-veredito" id="lt-veredito"></div>
       </div>
 
       <details>
@@ -242,7 +277,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const LISTAS = ["sentinelas", "controle", "wol_macs"];
-const NUMEROS = ["carencia", "autonomia", "intervalo", "ping_timeout", "ping_tentativas", "wol_intervalo", "wol_duracao"];
+const NUMEROS = ["carencia", "autonomia", "intervalo", "nobreak_duracao", "tempo_desligar", "ping_timeout", "ping_tentativas", "wol_intervalo", "wol_duracao"];
 let alterado = false;
 
 function duracao(seg) {
@@ -350,6 +385,48 @@ function duracoes() {
   for (const e of $$("[data-duracao]")) {
     const v = Number($(`#${e.dataset.duracao}`).value);
     e.textContent = Number.isFinite(v) && v >= 60 ? `= ${duracao(v)}` : "";
+  }
+  linhaDoTempo();
+}
+
+// Pior caso: a falta só é percebida na checagem seguinte (intervalo + pings) e o
+// TrueNAS consulta o NUT a cada ~5 s; depois ainda leva um tempo para desligar.
+function linhaDoTempo() {
+  const n = id => Math.max(0, Number($(`#${id}`).value) || 0);
+  const carencia = n("carencia"), autonomia = n("autonomia"), desligar = n("tempo_desligar"), nobreak = n("nobreak_duracao");
+  const deteccao = n("intervalo") + n("ping_timeout") * Math.max(1, n("ping_tentativas")) + 5;
+  const inicio = carencia + autonomia + deteccao, fim = inicio + desligar;
+  const escala = Math.max(fim, nobreak) * 1.04 || 1;
+  $("#lt1").style.width = `${100 * carencia / escala}%`;
+  $("#lt2").style.width = `${100 * (autonomia + deteccao) / escala}%`;
+  $("#lt3").style.width = `${100 * desligar / escala}%`;
+  const limite = $("#lt-limite");
+  limite.style.display = nobreak ? "block" : "none";
+  limite.style.left = `${100 * nobreak / escala}%`;
+  const t = $("#lt-texto"); t.replaceChildren();
+  const b = x => el("b", {}, x);
+  t.append("Luz cai → modo bateria em ", b(duracao(carencia)), " → TrueNAS começa a desligar em até ", b(duracao(inicio)),
+           " → desligado em até ", b(duracao(fim)), ".");
+  const v = $("#lt-veredito");
+  if (!nobreak) {
+    v.className = "lt-veredito"; v.textContent = "";
+    t.append(" Informe quanto seu nobreak aguenta para conferir se dá tempo.");
+    return;
+  }
+  const folga = nobreak - fim, margem = Math.max(30, nobreak * 0.2);
+  const maxAutonomia = Math.floor(nobreak - margem - carencia - deteccao - desligar);
+  const dica = maxAutonomia > 0
+    ? ` Com ${duracao(margem)} de margem, use no máximo ${duracao(maxAutonomia)} em modo bateria.`
+    : " Mesmo sem esperar em modo bateria não sobra margem: reduza o tempo até o modo bateria, o intervalo de checagem ou o que o NAS leva para desligar.";
+  if (folga < 0) {
+    v.className = "lt-veredito perigo";
+    v.textContent = `Não dá tempo: o nobreak acaba ${duracao(-folga)} antes de o NAS terminar de desligar.` + dica;
+  } else if (folga < margem) {
+    v.className = "lt-veredito aviso";
+    v.textContent = `Folga apertada: sobram ${duracao(folga)}. Baterias perdem capacidade com o tempo.` + dica;
+  } else {
+    v.className = "lt-veredito ok";
+    v.textContent = `Dá tempo, com ${duracao(folga)} de folga.`;
   }
 }
 function marcar() { alterado = true; $("#msg").textContent = "alterações não salvas"; $("#msg").className = "msg"; }

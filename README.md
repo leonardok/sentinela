@@ -39,6 +39,22 @@ configuração: sentinelas, controle, carência, autonomia, intervalo, ping e
 Wake-on-LAN. O que você salva passa a valer **na hora, sem reiniciar**, e fica
 em `/config/sentinela.json`.
 
+### Tempos
+
+O tempo até o desligamento se divide em duas fases, cada uma configurável:
+
+1. **Até entrar em modo bateria:** quanto tempo as sentinelas ficam mudas
+   antes de contar como falta de luz. Serve para ignorar um piscar de energia.
+2. **Em modo bateria até desligar:** quanto tempo esperar a luz voltar. Quando
+   acaba, o sentinela sinaliza bateria baixa e o TrueNAS desliga.
+
+Informe também quanto o seu nobreak aguenta e quanto o NAS leva para
+desligar. A interface desenha a linha do tempo no pior caso (a falta só é
+percebida na checagem seguinte) e avisa se o nobreak acaba antes de o NAS
+terminar de desligar, sugerindo o máximo de tempo em modo bateria. Para medir
+o tempo de desligamento, desligue o TrueNAS uma vez pela interface e
+cronometre.
+
 O navegador pede usuário e senha: o usuário pode ser qualquer um, e a senha é
 a `NUT_SENHA`, ou a `UI_SENHA` se você definir uma separada.
 
@@ -98,8 +114,10 @@ que você salva pela interface, o arquivo salvo tem prioridade:
 |---|---|---|
 | `SENTINELAS` | vazio | IPs ou nomes sem nobreak, separados por vírgula |
 | `CONTROLE` | vazio | IPs no nobreak; se todos sumirem, nada acontece |
-| `CARENCIA` | `60` | segundos sem sentinelas até `OB` |
-| `AUTONOMIA` | `240` | segundos em `OB` até bateria baixa |
+| `CARENCIA` | `30` | segundos sem sentinelas até o modo bateria (`OB`) |
+| `AUTONOMIA` | `90` | segundos em modo bateria até a bateria baixa, quando o TrueNAS desliga |
+| `NOBREAK_DURACAO` | `0` | quanto seu nobreak aguenta, só para a conta da interface |
+| `TEMPO_DESLIGAR` | `120` | quanto o NAS leva para desligar, só para a conta da interface |
 | `INTERVALO` | `15` | segundos entre checagens |
 | `PING_TIMEOUT` / `PING_TENTATIVAS` | `2` / `2` | por IP, a cada checagem |
 | `WOL_MACS` | vazio | MACs para acordar quando a energia volta |

@@ -111,6 +111,16 @@ class TestValidacao(unittest.TestCase):
             validar_ajustes({"sentinelas": ["10.0.0.2"], "controle": ["10.0.0.2"]})
         self.assertIn("controle", c.exception.erros)
 
+    def test_tempos_do_nobreak(self):
+        r = validar_ajustes({"nobreak_duracao": "180", "tempo_desligar": 90})
+        self.assertEqual((r["nobreak_duracao"], r["tempo_desligar"]), (180.0, 90.0))
+        with self.assertRaises(ErroValidacao):
+            validar_ajustes({"tempo_desligar": -1})
+
+    def test_padroes_cabem_em_nobreak_curto(self):
+        cfg = Config()
+        self.assertLessEqual(cfg.carencia + cfg.autonomia, 120)
+
     def test_ipv6(self):
         self.assertEqual(validar_ajustes({"controle": ["fe80::1"]})["controle"], ["fe80::1"])
 

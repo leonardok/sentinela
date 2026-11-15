@@ -78,8 +78,10 @@ class Config:
     sentinelas: list[str] = field(default_factory=list)
     controle: list[str] = field(default_factory=list)
     intervalo: float = 15
-    carencia: float = 60
-    autonomia: float = 240
+    carencia: float = 30
+    autonomia: float = 90
+    nobreak_duracao: float = 0     # só informativo: a interface avisa se a conta não fecha
+    tempo_desligar: float = 120    # quanto o servidor leva para desligar (informativo)
     ping_timeout: int = 2
     ping_tentativas: int = 2
     wol_macs: list[str] = field(default_factory=list)
@@ -121,6 +123,7 @@ class Config:
             "PING_TENTATIVAS": "ping_tentativas", "WOL_MACS": "wol_macs",
             "WOL_BROADCAST": "wol_broadcast", "WOL_DURACAO": "wol_duracao",
             "WOL_INTERVALO": "wol_intervalo", "WOL_AO_INICIAR": "wol_ao_iniciar",
+            "NOBREAK_DURACAO": "nobreak_duracao", "TEMPO_DESLIGAR": "tempo_desligar",
         }
         ajustes = {campo: env[var] for var, campo in mapa.items() if var in env}
         return base.com(validar_ajustes(ajustes, base.ajustes()))
@@ -195,6 +198,8 @@ AJUSTAVEIS = {
     "intervalo": _numero(2, 3600),
     "carencia": _numero(0, 86400),
     "autonomia": _numero(0, 86400),
+    "nobreak_duracao": _numero(0, 86400),
+    "tempo_desligar": _numero(0, 3600),
     "ping_timeout": _numero(1, 30, inteiro=True),
     "ping_tentativas": _numero(1, 10, inteiro=True),
     "wol_macs": _macs,
