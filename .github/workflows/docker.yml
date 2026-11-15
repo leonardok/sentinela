@@ -31,12 +31,12 @@ jobs:
       - name: Teste de fumaça (amd64)
         run: |
           docker buildx build --load -t sentinela:ci .
-          docker run -d --name s -e SENTINELAS=127.0.0.1 -e NUT_SENHA=ci sentinela:ci
+          docker run -d --name sentinela-ci -e SENTINELAS=127.0.0.1 -e NUT_SENHA=ci sentinela:ci
           for i in $(seq 1 15); do
-            status=$(docker exec s upsc sentinela@127.0.0.1 ups.status 2>/dev/null) && break
+            status=$(docker exec sentinela-ci upsc sentinela@127.0.0.1 ups.status 2>/dev/null) && break
             sleep 1
           done
-          docker logs s
+          docker logs sentinela-ci
           test "$status" = "OL"
 
       - uses: docker/login-action@v3
