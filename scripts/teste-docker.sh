@@ -80,7 +80,7 @@ done
 docker run -d --name "$P-sentinela" --network "$REDE" --ip "$IP_SENT" --cap-add NET_RAW \
   -e NUT_SENHA="$SENHA" \
   -e SENTINELAS="$IP_S1,$IP_S2" -e CONTROLE="$IP_CTRL" \
-  -e CARENCIA=4s -e AUTONOMIA=6s -e INTERVALO=1s -e PING_TIMEOUT=1 -e PING_TENTATIVAS=1 \
+  -e CARENCIA=4s -e AUTONOMIA=6s -e INTERVALO=2s -e PING_TIMEOUT=1 -e PING_TENTATIVAS=1 \
   "$IMG" >/dev/null
 
 docker run -d --name "$P-cliente" --network "$REDE" --ip "$IP_CLI" --entrypoint bash "$IMG" -c "
